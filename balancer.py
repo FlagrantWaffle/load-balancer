@@ -1,11 +1,9 @@
 import threading
 import requests
 from flask import Flask, Response
+
 import time
 from datetime import datetime, UTC
-
-from rich.console import Console
-from rich.table import Table
 
 from http import HTTPStatus
 
@@ -30,7 +28,7 @@ class LoadBalancer:
         @self.app.route("/health")
         def health():
             selected_server = self.get_next_server()
-            return self.forward_request(selected_server)
+            return self.forward_request(selected_server, "/health")
 
 
     def activate(self):
@@ -52,8 +50,8 @@ class LoadBalancer:
         return self.get_next_server_round_robin()
 
 
-    def forward_request(self, selected_server):
-        url = f"http://127.0.0.1:{selected_server.port}/health"
+    def forward_request(self, selected_server, endpoint):
+        url = f"http://127.0.0.1:{selected_server.port}{endpoint}"
 
         try:
             response = requests.get(url, timeout=3)
@@ -83,7 +81,7 @@ class LoadBalancer:
 
         for server in self.servers:
             name = server.name
-            response = self.forward_request(server)
+            response = self.forward_request(server, "/health")
             status = HTTPStatus(response.status_code)
             server_info.append(
                 {
@@ -124,5 +122,4 @@ if __name__ == '__main__':
 
 
     time.sleep(2)
-    
     lb.health_check()
