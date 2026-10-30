@@ -4,6 +4,10 @@ import requests
 from flask import Flask, Response
 import time
 
+import rich
+from rich.console import Console
+from rich.table import Table
+
 class LoadBalancer:
     def __init__(self, servers, port):
         self.servers = servers
@@ -80,17 +84,22 @@ if __name__ == '__main__':
 
     time.sleep(2)
     
+    console = Console()
+    table = Table(title="Server Cluster Status")
+    table.add_column("Server", style="cyan")
+    table.add_column("Status", style="green")
 
-    print("\n--- Round Robin Strategy ---")
-    for _ in range(10):
+    for _ in range(3):
         next_server = lb.get_next_server()
-    
-        print(f"Request routed to: {next_server.name}")
-
         selected_server = next_server
         response = lb.forward_request(selected_server)
 
-        print(response.status_code)
-        print(response.get_data(as_text=True))
+        name = next_server.name
+        status = response.status
+        colour_override = None if response.status_code == 200 else "red"
 
+        table.add_row(name, status, style=colour_override)
+
+    print("")
+    console.print(table)
     
