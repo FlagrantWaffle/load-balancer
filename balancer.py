@@ -101,13 +101,19 @@ if __name__ == '__main__':
             response = lb.forward_request(selected_server)
             status = HTTPStatus(response.status_code)
 
-        except requests.exceptions.ConnectionError:
-            status = HTTPStatus.BAD_GATEWAY
-            colour_override = "red"
+            if response.status_code >= 400:
+                colour_override = "red"
+
 
         except requests.exceptions.Timeout:
             status = HTTPStatus.GATEWAY_TIMEOUT
             colour_override = "red"
+
+        except requests.exceptions.ConnectionError:
+            status = HTTPStatus.BAD_GATEWAY
+            colour_override = "red"
+
+
 
 
         table.add_row(name, f"{status.value} {status.phrase}", style=colour_override)    
