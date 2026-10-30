@@ -17,8 +17,10 @@ class LoadBalancer:
         self.port = port
         self.lock = threading.Lock()
         self.current_server_index = 0
+        self.server_health = {server.name: False for server in self.servers}
 
         self.app = Flask("LoadBalancer")
+
 
         @self.app.route("/")
         def index():
@@ -38,20 +40,36 @@ class LoadBalancer:
     def get_next_server_round_robin(self):
 
         with self.lock:
-            if len(self.servers) > 0:
-                server = self.servers[self.current_server_index]
-                self.current_server_index = (self.current_server_index + 1) % len(self.servers)
+            
+
+            healthy_servers = [
+                server for server in self.servers if self.server_health[server.name]
+            ]
+
+            if len(healthy_servers) > 0:
+
+                self.current_server_index %= len(healthy_servers)
+                server = healthy_servers[self.current_server_index]
+                self.current_server_index = (self.current_server_index + 1) % len(healthy_servers)
+
                 return server
 
-            raise RuntimeError("No servers available for load balancing")
-
+            return None
 
     def get_next_server(self):
         return self.get_next_server_round_robin()
 
 
     def forward_request(self, selected_server, endpoint):
+
+        if selected_server is None:
+            return Response(
+                "No servers available for load balancing",
+                status=HTTPStatus.SERVICE_UNAVAILABLE
+            )
+
         url = f"http://127.0.0.1:{selected_server.port}{endpoint}"
+
 
         try:
             response = requests.get(url, timeout=3)
@@ -78,6 +96,7 @@ class LoadBalancer:
 
     def health_check(self):
         server_info = []
+        server_health = {}
 
         for server in self.servers:
             name = server.name
@@ -91,11 +110,13 @@ class LoadBalancer:
                 }
             )
 
+            server_health[name] = status == HTTPStatus.OK
+
         create_server_health_table(server_info)
 
-
+        with self.lock:
+            self.server_health = server_health
         
-
 
 if __name__ == '__main__':
 
