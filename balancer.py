@@ -1,14 +1,17 @@
 import threading
-from servers import Server
 import requests
 from flask import Flask, Response
 import time
+from datetime import datetime, UTC
 
-import rich
 from rich.console import Console
 from rich.table import Table
 
 from http import HTTPStatus
+
+from servers import Server
+from tables import create_server_health_table
+
 
 class LoadBalancer:
     def __init__(self, servers, port):
@@ -32,7 +35,6 @@ class LoadBalancer:
 
     def activate(self):
         self.app.run(port=self.port, use_reloader=False)
-
 
 
     def get_next_server_round_robin(self):
@@ -76,6 +78,27 @@ class LoadBalancer:
                 content_type = response.headers.get("Content-Type")
             )
 
+    def health_check(self):
+        server_info = []
+
+        for server in self.servers:
+            name = server.name
+            response = self.forward_request(server)
+            status = HTTPStatus(response.status_code)
+            server_info.append(
+                {
+                    "name": name,
+                    "status_value": status.value,
+                    "status_phrase": status.phrase
+                }
+            )
+
+        create_server_health_table(server_info)
+
+
+        
+
+
 if __name__ == '__main__':
 
     SERVER_A = Server("SERVER_A", 9001)
@@ -102,26 +125,4 @@ if __name__ == '__main__':
 
     time.sleep(2)
     
-    console = Console()
-    table = Table(title="Server Cluster Status")
-    table.add_column("Server", style="cyan")
-    table.add_column("Status", style="green")
-
-    for _ in range(len(lb.servers)):
-        next_server = lb.get_next_server()
-        selected_server = next_server
-        name = next_server.name
-        colour_override = None
-
-
-        response = lb.forward_request(selected_server)
-        status = HTTPStatus(response.status_code)
-
-        if response.status_code >= 400:
-            colour_override = "red"
-
-        table.add_row(name, f"{status.value} {status.phrase}", style=colour_override)    
-
-
-    print("")
-    console.print(table)
+    lb.health_check()
