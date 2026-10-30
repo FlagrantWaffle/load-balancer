@@ -8,6 +8,8 @@ import rich
 from rich.console import Console
 from rich.table import Table
 
+from http import HTTPStatus
+
 class LoadBalancer:
     def __init__(self, servers, port):
         self.servers = servers
@@ -92,14 +94,24 @@ if __name__ == '__main__':
     for _ in range(3):
         next_server = lb.get_next_server()
         selected_server = next_server
-        response = lb.forward_request(selected_server)
-
         name = next_server.name
-        status = response.status
-        colour_override = None if response.status_code == 200 else "red"
+        colour_override = None
 
-        table.add_row(name, status, style=colour_override)
+        try:
+            response = lb.forward_request(selected_server)
+            status = HTTPStatus(response.status_code)
+
+        except requests.exceptions.ConnectionError:
+            status = HTTPStatus.BAD_GATEWAY
+            colour_override = "red"
+
+        except requests.exceptions.Timeout:
+            status = HTTPStatus.GATEWAY_TIMEOUT
+            colour_override = "red"
+
+
+        table.add_row(name, f"{status.value} {status.phrase}", style=colour_override)    
+
 
     print("")
     console.print(table)
-    
