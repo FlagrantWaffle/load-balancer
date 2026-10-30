@@ -52,13 +52,29 @@ class LoadBalancer:
 
     def forward_request(self, selected_server):
         url = f"http://127.0.0.1:{selected_server.port}/health"
-        response = requests.get(url, timeout=3)
 
-        return Response(
-            response.content,
-            status = response.status_code,
-            content_type = response.headers.get("Content-Type")
-        )
+        try:
+            response = requests.get(url, timeout=3)
+            status = response.status_code
+
+        except requests.exceptions.Timeout:
+            return Response(
+                "Backend server timed out",
+                status=HTTPStatus.GATEWAY_TIMEOUT
+            )
+
+        except requests.exceptions.ConnectionError:
+            return Response(
+                "Backend server could not be reached",
+                status=HTTPStatus.BAD_GATEWAY
+            )
+
+        else:
+            return Response(
+                response.content,
+                status = status,
+                content_type = response.headers.get("Content-Type")
+            )
 
 if __name__ == '__main__':
 
@@ -91,30 +107,18 @@ if __name__ == '__main__':
     table.add_column("Server", style="cyan")
     table.add_column("Status", style="green")
 
-    for _ in range(3):
+    for _ in range(len(lb.servers)):
         next_server = lb.get_next_server()
         selected_server = next_server
         name = next_server.name
         colour_override = None
 
-        try:
-            response = lb.forward_request(selected_server)
-            status = HTTPStatus(response.status_code)
 
-            if response.status_code >= 400:
-                colour_override = "red"
+        response = lb.forward_request(selected_server)
+        status = HTTPStatus(response.status_code)
 
-
-        except requests.exceptions.Timeout:
-            status = HTTPStatus.GATEWAY_TIMEOUT
+        if response.status_code >= 400:
             colour_override = "red"
-
-        except requests.exceptions.ConnectionError:
-            status = HTTPStatus.BAD_GATEWAY
-            colour_override = "red"
-
-
-
 
         table.add_row(name, f"{status.value} {status.phrase}", style=colour_override)    
 
