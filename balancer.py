@@ -10,16 +10,19 @@ from http import HTTPStatus
 from servers import Server
 from tables import create_server_health_table
 
+import logging
 
 class LoadBalancer:
     def __init__(self, servers, port):
         self.servers = servers
         self.port = port
         self.lock = threading.Lock()
+        self.stop_event = threading.Event()
         self.current_server_index = 0
         self.server_health = {server.name: False for server in self.servers}
 
         self.app = Flask("LoadBalancer")
+
 
 
         @self.app.route("/")
@@ -34,20 +37,34 @@ class LoadBalancer:
 
 
     def activate(self):
+
+        for server in self.servers:
+            thread = threading.Thread(
+                target=server.activate,
+                name=server.name,
+                daemon=True
+            )
+            thread.start()
+
+        health_thread = threading.Thread(
+            target=self.monitor_health,
+            name="HealthMonitor",
+            daemon=True
+        )
+        health_thread.start()
+
         self.app.run(port=self.port, use_reloader=False)
+
 
 
     def get_next_server_round_robin(self):
 
         with self.lock:
-            
-
             healthy_servers = [
                 server for server in self.servers if self.server_health[server.name]
             ]
 
             if len(healthy_servers) > 0:
-
                 self.current_server_index %= len(healthy_servers)
                 server = healthy_servers[self.current_server_index]
                 self.current_server_index = (self.current_server_index + 1) % len(healthy_servers)
@@ -99,24 +116,52 @@ class LoadBalancer:
         server_health = {}
 
         for server in self.servers:
-            name = server.name
-            response = self.forward_request(server, "/health")
-            status = HTTPStatus(response.status_code)
-            server_info.append(
-                {
-                    "name": name,
-                    "status_value": status.value,
-                    "status_phrase": status.phrase
-                }
-            )
+            try:
+                response = self.forward_request(server, "/health")
+                status_code = response.status_code
 
-            server_health[name] = status == HTTPStatus.OK
+                try:
+                    status_phrase = HTTPStatus(status_code).phrase
+                except ValueError:
+                    status_phrase = "Unknown HTTP status"
 
-        create_server_health_table(server_info)
+                server_info.append({
+                    "name": server.name,
+                    "status_value": status_code,
+                    "status_phrase": status_phrase
+                })
+
+                server_health[server.name] = status_code == HTTPStatus.OK
+
+            except Exception:
+                logging.exception(
+                    "Health check failed for %s", server.name
+                )
+
+                server_health[server.name] = False
+
+                server_info.append({
+                    "name": server.name,
+                    "status_value": "N/A",
+                    "status_phrase": "Health check failed"
+                })
 
         with self.lock:
             self.server_health = server_health
-        
+
+        create_server_health_table(server_info)
+
+
+    def monitor_health(self):
+        while not self.stop_event.is_set():
+            try:
+                self.health_check()
+
+            except Exception:
+                logging.exception("Health monitor encountered an error")
+
+            self.stop_event.wait(5)
+
 
 if __name__ == '__main__':
 
@@ -124,23 +169,11 @@ if __name__ == '__main__':
     SERVER_B = Server("SERVER_B", 9002)
     SERVER_C = Server("SERVER_C", 9003)
 
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(message)s"
+    )
 
     server_list = [SERVER_A, SERVER_B, SERVER_C]
     lb = LoadBalancer(server_list, 8000)
-
-
-    thread_a = threading.Thread(target=SERVER_A.activate)
-    thread_a.start()
-
-    thread_b = threading.Thread(target=SERVER_B.activate)
-    thread_b.start()
-
-    thread_c = threading.Thread(target=SERVER_C.activate)
-    thread_c.start()
-
-    thread_lb = threading.Thread(target=lb.activate)
-    thread_lb.start()
-
-
-    time.sleep(2)
-    lb.health_check()
+    lb.activate()
