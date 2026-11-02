@@ -99,6 +99,9 @@ class LoadBalancer:
             )
 
         except requests.exceptions.ConnectionError:
+            with self.lock:
+                self.server_health[selected_server.name] = False
+
             return Response(
                 "Backend server could not be reached",
                 status=HTTPStatus.BAD_GATEWAY
