@@ -27,7 +27,7 @@ class LoadBalancer:
 
         @self.app.route("/")
         def index():
-            return "Hi! Im the load balancer"
+            return 'Hi! Im the load balancer <br> <a href="/health">Health</a>'
 
 
         @self.app.route("/health")
