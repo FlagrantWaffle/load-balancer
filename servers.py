@@ -38,7 +38,13 @@ class Server:
 
             return "", 204
 
+        @self.app.post("/__test/restore")
+        def restore_error():
+            print(f"{self.name} has been restored")
+            data = request.get_json(silent=True) or {}
+            self.error = None
 
+            return "", 204
 
 
     def activate(self):

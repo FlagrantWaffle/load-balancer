@@ -1,36 +1,71 @@
+
 import argparse
 from test_rig import TestRig
 
 
 TR = TestRig()
-parser = argparse.ArgumentParser(description="Load Balancer Test Rig", formatter_class=argparse.RawDescriptionHelpFormatter)
 
-parser.add_argument("lb", help="The name of the load balancer")
-parser.add_argument("--lbport", required=True, help="The port the load balancer is exposed on")
-parser.add_argument("--server", required=True, help="The name of the server")
-parser.add_argument("--error", required=True, help="The error to reproduce")
+def handle_inject(args):
+    error_handlers = {
+        503: lambda: TR.produce_503(args.lb, args.lbport, args.server)
+    }
 
-args = parser.parse_args()
-print(args.lb)
-print(args.lbport)
-print(args.server)
-print(args.error)
+    try:
+        error_handlers[args.error]()
+        print("Fault injection requested")
 
-if args is None:
-    parser.print_help()
-    raise SystemExit(0)
+    except KeyError:
+        print(f"Unsupported Error Code: {args.error}")
 
-args_to_rig = {
-    503: lambda: TR.produce_503(args.lb, args.lbport, args.server)
-}
+    except (ValueError, TypeError) as exc:
+        print(f"Invalid Input: {exc}")
 
-try:
-    error_handler = args_to_rig[int(args.error)]()
-    print("attempting to send args to rig")
-    
 
-except KeyError as exc:
-    print(f"Unsupported Error Code: {exc}")
+def handle_restore(args):
+    TR.restore_servers(args.lbport, args.server)
+    print("Server restoration requested")
 
-except (ValueError, TypeError) as exc:
-    print(f"Invalid Input: {exc}")
+
+parser = argparse.ArgumentParser(
+    description="Load Balancer Test Rig",
+    formatter_class=argparse.RawDescriptionHelpFormatter
+)
+
+subparsers = parser.add_subparsers(
+    dest="command",
+    required=True
+)
+
+# INJECT
+inject_parser = subparsers.add_parser(
+    "inject",
+    help="Inject a fault into a server"
+)
+
+inject_parser.add_argument("lb", help="The name of the load balancer")
+inject_parser.add_argument("--lbport", required=True, type=int, help="The load balancer port")
+inject_parser.add_argument("--server", required=True, help="The name of the server")
+inject_parser.add_argument("--error", required=True, type=int, help="The error to reproduce")
+
+inject_parser.set_defaults(func=handle_inject)
+
+
+# RESTORE
+restore_parser = subparsers.add_parser(
+    "restore",
+    help="Restore servers to their normal state"
+)
+
+restore_parser.add_argument("lb", help="The name of the load balancer")
+restore_parser.add_argument("--lbport", required=True, type=int, help="The load balancer port")
+restore_parser.add_argument("--server", help="The name of the server")
+restore_parser.set_defaults(func=handle_restore)
+
+
+def main():
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
