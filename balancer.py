@@ -1,6 +1,6 @@
 import threading
 import requests
-from flask import Flask, Response
+from flask import Flask, Response, jsonify
 
 import time
 from datetime import datetime, UTC
@@ -24,7 +24,6 @@ class LoadBalancer:
         self.app = Flask("LoadBalancer")
 
 
-
         @self.app.route("/")
         def index():
             return 'Hi! Im the load balancer <br> <a href="/health">Health</a>'
@@ -34,6 +33,13 @@ class LoadBalancer:
         def health():
             selected_server = self.get_next_server()
             return self.forward_request(selected_server, "/health")
+
+
+        @self.app.get("/backends")
+        def get_backends():
+            return jsonify(
+                {server.name: server.port for server in self.servers}
+            )
 
 
     def activate(self):
@@ -164,6 +170,9 @@ class LoadBalancer:
                 logging.exception("Health monitor encountered an error")
 
             self.stop_event.wait(5)
+
+
+
 
 
 if __name__ == '__main__':
