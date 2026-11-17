@@ -1,6 +1,9 @@
 from flask import Flask, jsonify, request
 from datetime import datetime, UTC
 from http import HTTPStatus
+from auth import require_fault_token
+from auth import FAULT_INJECTION_ACTIVE
+
 
 class Server:
 
@@ -27,24 +30,28 @@ class Server:
                 "timestamp": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
             })
 
-        @self.app.post("/__test/error")
-        def inject_error():
-            data = request.get_json(silent=True) or {}
+        if FAULT_INJECTION_ACTIVE:
+        
+            @self.app.post("/__test/error")
+            @require_fault_token
+            def inject_error():
+                data = request.get_json(silent=True) or {}
 
-            if data.get("error") != 503:
-                return jsonify({"error": "Unsupported error code"}), 400
+                if data.get("error") != 503:
+                    return jsonify({"error": "Unsupported error code"}), 400
 
-            self.error = HTTPStatus.SERVICE_UNAVAILABLE
+                self.error = HTTPStatus.SERVICE_UNAVAILABLE
 
-            return "", 204
+                return "", 204
 
-        @self.app.post("/__test/restore")
-        def restore_error():
-            print(f"{self.name} has been restored")
-            data = request.get_json(silent=True) or {}
-            self.error = None
 
-            return "", 204
+            @self.app.post("/__test/restore")
+            @require_fault_token
+            def restore_error():
+                print(f"{self.name} has been restored")
+                self.error = None
+
+                return "", 204
 
 
     def activate(self):

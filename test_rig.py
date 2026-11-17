@@ -1,8 +1,12 @@
 from http import HTTPStatus
 import requests
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 class TestRig:
-
 
     def restore_servers(self, lb_port, server=None):
         response = requests.get(
@@ -23,7 +27,10 @@ class TestRig:
             print(f"Attempting to restore {server_name}")
 
             restore_response = requests.post(
-                f"http://127.0.0.1:{port}/__test/restore",
+                url = f"http://127.0.0.1:{port}/__test/restore",
+                headers = {
+                    "Authorization": f"Bearer {os.environ['FAULT_INJECTION_TOKEN']}"
+                },
                 json={"error": None},
                 timeout=3
             )
@@ -45,8 +52,15 @@ class TestRig:
 
         post_response = requests.post(
             url = f"http://127.0.0.1:{int(server_port)}/__test/error",
-            json = {
-                "error": 503,
+            headers = {
+                "Authorization": f"Bearer {os.environ['FAULT_INJECTION_TOKEN']}"
             },
-            timeout = 3
+            json = {
+                "error": 503
+            },
+            timeout=3
         )
+
+        post_response.raise_for_status()
+
+                
